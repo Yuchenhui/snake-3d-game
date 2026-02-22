@@ -206,6 +206,7 @@
         
         let scene, camera, renderer, controls;
         let snake = [];
+        let snakeRotations = []; // 存储每个蛇身的旋转角度
         let food = null;
         let direction = { x: 1, y: 0, z: 0 };
         let nextDirection = { x: 1, y: 0, z: 0 };
@@ -303,7 +304,7 @@
         }
         
         function createSnakeSegment(position, isHead = false) {
-            const geometry = new THREE.SphereGeometry(CELL_SIZE * 0.4, 16, 16);
+            const geometry = new THREE.BoxGeometry(CELL_SIZE * 0.7, CELL_SIZE * 0.7, CELL_SIZE * 0.7);
             const material = new THREE.MeshStandardMaterial({
                 color: isHead ? 0x00ffaa : 0x00cc88,
                 emissive: isHead ? 0x00ffaa : 0x004433,
@@ -315,11 +316,11 @@
             mesh.position.copy(position);
             
             if (isHead) {
-                const glowGeometry = new THREE.SphereGeometry(CELL_SIZE * 0.5, 16, 16);
+                const glowGeometry = new THREE.BoxGeometry(CELL_SIZE * 0.85, CELL_SIZE * 0.85, CELL_SIZE * 0.85);
                 const glowMaterial = new THREE.MeshBasicMaterial({
                     color: 0x00ffaa,
                     transparent: true,
-                    opacity: 0.3
+                    opacity: 0.25
                 });
                 const glow = new THREE.Mesh(glowGeometry, glowMaterial);
                 mesh.add(glow);
@@ -358,17 +359,31 @@
             const halfSize = (GRID_SIZE - 1) / 2;
             let position;
             let attempts = 0;
+            const maxAttempts = 200;
             
-            do {
-                position = new THREE.Vector3(
-                    Math.floor(Math.random() * GRID_SIZE) - halfSize,
-                    Math.floor(Math.random() * GRID_SIZE) - halfSize,
-                    Math.floor(Math.random() * GRID_SIZE) - halfSize
-                ).multiplyScalar(CELL_SIZE);
-                attempts++;
-            } while (isPositionOccupied(position) && attempts < 100);
+            // 收集所有空位
+            const emptyPositions = [];
+            for (let x = -halfSize; x <= halfSize; x++) {
+                for (let y = -halfSize; y <= halfSize; y++) {
+                    for (let z = -halfSize; z <= halfSize; z++) {
+                        const testPos = new THREE.Vector3(x, y, z).multiplyScalar(CELL_SIZE);
+                        if (!isPositionOccupied(testPos)) {
+                            emptyPositions.push(testPos);
+                        }
+                    }
+                }
+            }
             
-            return position;
+            if (emptyPositions.length > 0) {
+                return emptyPositions[Math.floor(Math.random() * emptyPositions.length)];
+            }
+            
+            // 如果没有空位，随机返回一个（游戏会结束）
+            return new THREE.Vector3(
+                Math.floor(Math.random() * GRID_SIZE) - halfSize,
+                Math.floor(Math.random() * GRID_SIZE) - halfSize,
+                Math.floor(Math.random() * GRID_SIZE) - halfSize
+            ).multiplyScalar(CELL_SIZE);
         }
         
         function isPositionOccupied(position) {
@@ -397,6 +412,7 @@
         function resetGame() {
             snake.forEach(seg => scene.remove(seg.mesh));
             snake = [];
+            snakeRotations = [];
             
             if (foodMesh) {
                 scene.remove(foodMesh);
@@ -407,6 +423,7 @@
             const startPos = new THREE.Vector3(0, 0, 0).multiplyScalar(CELL_SIZE);
             
             snake.push({ position: startPos.clone(), mesh: createSnakeSegment(startPos, true) });
+            snakeRotations.push({ x: 0, y: 0 });
             
             direction = { x: 1, y: 0, z: 0 };
             nextDirection = { x: 1, y: 0, z: 0 };
@@ -456,6 +473,11 @@
             
             const isHead = true;
             const newMesh = createSnakeSegment(newPosition, isHead);
+            newMesh.rotation.set(
+                Math.random() * Math.PI,
+                Math.random() * Math.PI,
+                Math.random() * Math.PI
+            );
             
             if (snake[0].mesh.children.length > 0) {
                 snake[0].mesh.children[0].removeFromParent();
@@ -535,6 +557,13 @@
                 const scale = 1 + Math.sin(currentTime * 0.005) * 0.1;
                 foodMesh.scale.set(scale, scale, scale);
             }
+            
+            // 旋转所有蛇身片段，使其始终可见
+            snake.forEach((seg, index) => {
+                const rotationSpeed = 0.02 + index * 0.005;
+                seg.mesh.rotation.x += rotationSpeed;
+                seg.mesh.rotation.y += rotationSpeed * 0.7;
+            });
             
             if (gameRunning && !gamePaused && currentTime - lastMoveTime > moveInterval) {
                 moveSnake();
